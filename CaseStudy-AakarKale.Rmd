@@ -1,0 +1,233 @@
+---
+title: "Case Study Final"
+author: "Aakar Kale"
+date: "12/12/2019"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## reading the dataset
+```{r}
+GC <- read.csv("/Users/aakarkale/Desktop/CSUEB/Data Mining/GermanCredit.csv") #dataset is read thorugh csv command and saved into a variable name GC.
+missing(GC) #dataset is checked for any missing value
+#View(GC)
+str(GC)
+```
+# Q1. Review the predictor variables and guess what their role in a credit decision might be. Are there any surprise in the data?
+
+```{r}
+GC$PRESENT_RESIDENT <- GC$PRESENT_RESIDENT - 1
+GC <- GC[,c(-1,-22)]
+
+GC$ANOTHER_OBJECTIVE <- ifelse(GC$NEW_CAR+GC$USED_CAR+GC$FURNITURE+GC$RADIO.TV+GC$EDUCATION+GC$RETRAINING==0, 1, 0)
+
+GC$Female <- ifelse(GC$MALE_DIV+GC$MALE_MAR_or_WID+GC$MALE_SINGLE==0, 1, 0)
+
+GC$PRESENT_RESIDENT <- factor(GC$PRESENT_RESIDENT, levels = c(0, 1, 2, 3), labels=c("<=1_year","1-2_years","2-3_year",">=3_years"))
+
+GC$EMPLOYMENT <- factor(GC$EMPLOYMENT, levels = c(0,1,2,3,4), labels = c("Unemployed", "1year","1-3year","4-6year",">=7years"))
+
+GC$JOB <- factor(GC$JOB, levels = c(0, 1, 2, 3), labels=c("Uemployed","Unskilled-employee","Skilled employee","highly qualified employee/self employed"))
+
+GC$CHK_ACCT <- factor(GC$CHK_ACCT, levels=c(0,1,2,3), labels = c("<0DM","0-200DM","200DM","No_checking_account"))
+
+GC$HISTORY <- factor(GC$HISTORY, levels = c(0,1,2,3,4), labels = c("No_credits","Paid","Existing_paid","Unpaid","important_account"))
+
+GC$SAV_ACCT <- factor(GC$SAV_ACCT, levels=c(0,1,2,3,4), labels = c("<
+                                                        100DM","101-500DM","501-1000DM","1000DM","no_saving_account"))
+
+NEW_GC <- GC
+head(GC)
+head(NEW_GC)
+
+
+library(dplyr)
+AMOUNT.mean = GC %>% dplyr::select(AMOUNT,RESPONSE) %>% group_by(RESPONSE) %>% summarise(m =mean(AMOUNT))
+AMOUNT.mean
+DURATION.mean = GC %>% dplyr::select(DURATION,RESPONSE) %>%group_by(RESPONSE) %>% summarise( m =mean(DURATION))
+DURATION.mean
+INSTALL_RATE.median = GC %>% dplyr::select(INSTALL_RATE,RESPONSE) %>%group_by(RESPONSE) %>% summarise( m =median(INSTALL_RATE))
+INSTALL_RATE.median
+AGE.median = GC %>% dplyr::select(AGE,RESPONSE) %>%group_by(RESPONSE) %>% summarise( m =median(AGE))
+AGE.median
+
+```
+In this dataset there were 4 categories in Present_Resident so one has to be substracted in order to have 0 to 3 levels. Real_estate and Prop_Unkn_none- either of them can be 0 but cannot be 0 at the same time. the Another-objective option is need and should be added to the data set. So the Female option has been added.
+
+At the end of this chunk, median values for bad records is lesser than that of good records in age variable, it might be premature to say young people tend to have bad credit records, but we can safely assume it tends to be riskier. In case of installment_rate variable great difference between the good and bad records, we see that bad records have more median value than good ones.
+
+For the amount variable, we observe that the amount for bad records is larger in general as compared to good ones.
+
+
+
+#Q2. Divide the data into trainning and validatin partitions, and develop classification models using following data mining techniques in R: logistic regression, classification trees, and neural networks.
+
+#Q.3.Choose one modelfrom each technique and report the confusion matrix and the cost/gain matrix for the validation data. Which technique has the highest net profit?
+```{r}
+#install.packages("e1071")
+library(e1071)
+
+#creating model for logistic regression
+set.seed(2)
+dim(GC)
+training_rows <- sample(c(1:1000), 800) #sample is taken for first 1000 rows
+train_data <- GC[training_rows,]#training data was made
+valid_data <- GC[-training_rows,]#test data was made
+
+#Model
+glm <- glm(RESPONSE~., data = train_data, family="binomial") #logistic model was created
+options(scipen = 999)
+summary(glm) #summary of the model was shown
+
+pred_v <- predict(glm, valid_data[,-30], type = "response")
+#prediction of the model was done
+library(caret)
+library(ggplot2)
+confusionMatrix(as.factor(ifelse(pred_v>0.5, 1, 0)), as.factor(valid_data$RESPONSE))
+#confusion matrix created
+
+```
+ Logistic Regression Model
+ Cost Metrix:
+             Reference
+             Bad            Good
+ Predited
+ Bad         0              100*26=2600   
+ Good     34*500=17000       0
+ Gain Matrix:
+             Reference
+              Bad           Good
+ Predicted    
+ Bad          0             0
+ Good      -500*34=-17000    100*107=10700
+ Logistic Regression Model, net profit is -6300.
+ 
+ 
+ 
+# Classification Tree
+```{r}
+library(rpart) 
+library(rpart.plot)
+set.seed(1)
+training_rows <- sample(c(1:1000), 800)
+train_data_tree <- NEW_GC[training_rows,]
+valid_data_tree <- NEW_GC[-training_rows,]
+
+#classification tree model
+train_tree <- rpart(RESPONSE ~ ., data = train_data_tree, minbucket = 50, maxdepth = 10, model=TRUE, method = "class")
+train_tree$cptable[which.min(train_tree$cptable[,"xerror"]),"CP"]
+pfit_tree <- prune(train_tree, cp = train_tree$cptable[which.min(train_tree$cptable[,"xerror"]),"CP"])
+prp(train_tree) 
+# predictions on validation set 
+pred_valid <- predict(train_tree, valid_data[,-30])
+confusionMatrix(as.factor(1*(pred_valid[,2]>0.5)), as.factor(valid_data$RESPONSE), positive = "1")
+
+```
+ Classification tree model,
+ Cost Metrix:
+              Reference
+             Bad            Good
+ Predited
+ Bad         0              100*12=1200   
+ Good     48*500=31500       0
+ Gain Matrix:
+              Reference 
+              Bad           Good
+ Predicted    
+ Bad          0             0
+ Good      -500*48=-31500    100*121=19200
+Classification Tree Model, net profit is -12300.
+
+# NeuralNet Model
+```{r}
+library("neuralnet")
+NN_GC <- read.csv("/Users/aakarkale/Desktop/CSUEB/Data Mining/GermanCredit.csv")
+scale <- preProcess(NN_GC, method = c("range"))
+GC_scale <- predict(scale, NN_GC)
+GC_scale$good_credit <- GC_scale$RESPONSE == 1
+GC_scale$bad_credit <- GC_scale$RESPONSE == 0
+
+set.seed(1)
+training_rows <- sample(c(1:1000), 800)
+train_data_nn <- GC_scale[training_rows,]
+valid_data_nn <- GC_scale[-training_rows,]
+
+colnames(train_data_nn)[8] <- "RADIO_OR_TV"
+colnames(train_data_nn)[18] <- "COAPPLICANT" 
+colnames(train_data_nn)
+nn <- neuralnet(bad_credit+good_credit~CHK_ACCT+DURATION+HISTORY+NEW_CAR+USED_CAR+FURNITURE+RADIO_OR_TV+EDUCATION+RETRAINING+AMOUNT+SAV_ACCT+EMPLOYMENT+INSTALL_RATE+MALE_DIV+MALE_SINGLE+MALE_MAR_or_WID+COAPPLICANT+GUARANTOR+PRESENT_RESIDENT+REAL_ESTATE+PROP_UNKN_NONE+AGE+OTHER_INSTALL+RENT+OWN_RES+NUM_CREDITS+JOB+NUM_DEPENDENTS+TELEPHONE+FOREIGN, data = train_data_nn, linear.output = F, hidden = 3)
+
+plot(nn, rep="best")
+predict <- neuralnet::compute(nn, valid_data_nn[,2:31])
+
+predicted.class <- apply(predict$net.result,1,which.max)-1
+confusionMatrix(as.factor(predicted.class), as.factor(valid_data_nn$RESPONSE))
+
+```
+ Neural network model,
+Cost Metrix:
+              Reference
+             Bad            Good
+ Predited
+ Bad         0              100*19=1900   
+ Good     41*500=20500       0
+ Gain Matrix:
+             Reference
+              Bad           Good
+ Predicted    
+ Bad          0             0
+ Good      -500*41=-20500   100*114=11400
+ Neuralnet Model, net profit is -9100.
+
+ So by looking over all the models,the logistic regression model provides the best net profit.
+
+
+
+# 4.Let's try and improve our performance. Rather than accept the default classification of all applicants' credit status, use the estimated probabilities (propensities) from the logistic regression (where success means 1) as a basis for selecting the best credit risks first, followed by poorer-risk applicants. Create a vector containing the net profit for each record in the validation set. Use this vestor to create a decile-wise lift chart for the validation set that incorporates the net profit.
+
+# Problem (a): How far into the validation data should you go to get maximum net profit? (often, this is specified as a percentile or rounded to deciles.) 
+```{r}
+netprofit <- data.frame(Predicted = pred_v, Actual = valid_data$RESPONSE)
+netprofit <- netprofit[order(-netprofit$Predicted),]
+netprofit$net_profit <- netprofit$Actual*100
+
+net_profit <- as.vector(netprofit$net_profit)
+library(gains)
+gain <- gains(net_profit, netprofit$Predicted, groups=10)
+heights <- gain$mean.resp/mean(netprofit$Actual)
+midpoints <- barplot(heights, names.arg = gain$depth, ylim = c(0,150), 
+xlab = "Percentile", ylab = "Mean response", main = "Decile-wise chart")
+text(midpoints, heights+0.5, labels=round(heights, 1), cex = 0.8)
+
+```
+From this chart, we can easily see that we can use model to select the top 50% data with the highest propensities to get maximum net profit.
+
+
+# Problem (b):if this logistic regression model is used to score to future applicants, what "probability of success" cutoff should be used in extending credit?
+```{r}
+
+# plot lift chart
+plot(c(0,gain$cume.pct.of.total*sum(netprofit$Actual))~c(0,gain$cume.obs), 
+xlab="number of cases", ylab="Total", main="", type="l")
+lines(c(0,sum(netprofit$Actual))~c(0, dim(netprofit)[1]), lty=2)
+# plot a ROC curve
+library(pROC)
+r <- roc(netprofit$Actual, netprofit$Predicted)
+plot.roc(r)
+auc(r)
+cut_off <- netprofit$Predicted[round(length(netprofit$Predicted)*0.5)]
+cut_off
+
+```
+So, 0.756 cutoff value should be used in extending credit.
+
+In this case study, I can conclude that logistic regression model is the best model. 
+However, the bank cannot be guaranteed to bave benefit using the highest accruraccy model. The top 50% of the data provides the best profit. The best decision should be made by using the cutoff value or the top 30% of the validation data. 
+
+
